@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+<title>Habit-Tracker — Your Daily OS</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%23c9a24d%22/><text x=%2250%22 y=%2266%22 font-size=%2254%22 text-anchor=%22middle%22 fill=%22%231a1608%22 font-family=%22sans-serif%22>H</text></svg>">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+  :root {
+    --bg:#0e1015; --surface:#171a22; --surface-2:#1e222c; --surface-3:#262b37;
+    --border:#2a2f3b; --border-soft:#20242e; --text:#f0eee8; --text-dim:#9498a6; --text-faint:#61667a;
+    --accent:#c9a24d; --accent-soft:#c9a24d22; --accent-2:#5aa895; --accent-2-soft:#5aa89522;
+    --danger:#e2604f; --violet:#8b7fd6;
+  }
+  * { box-sizing: border-box; }
+  html,body,#root { margin:0; padding:0; min-height:100vh; background:var(--bg); }
+  body { font-family:'Inter',sans-serif; color:var(--text); }
+  .font-display{font-family:'Fraunces',serif;} .font-mono{font-family:'JetBrains Mono',monospace;}
+  .card{background:var(--surface);border:1px solid var(--border-soft);border-radius:16px;transition:border-color .2s;}
+  .card:hover{border-color:var(--border);}
+  .btn{display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer;}
+  .btn:hover{background:var(--surface-3);border-color:var(--accent);}
+  .btn-accent{background:var(--accent);color:#1a1608;border:1px solid var(--accent);font-weight:700;}
+  .input{background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:9px 12px;font-size:13px;width:100%;outline:none;}
+  .input:focus{border-color:var(--accent);}
+  .label{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;font-weight:600;}
+  .tag{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:3px 8px;border-radius:999px;display:inline-block;}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;cursor:pointer;color:var(--text-dim);font-size:13px;font-weight:500;border:1px solid transparent;}
+  .nav-item:hover{background:var(--surface-2);color:var(--text);}
+  .nav-item.active{background:var(--accent-soft);color:var(--accent);border-color:var(--accent);}
+  .progress-track{background:var(--surface-3);border-radius:999px;height:6px;overflow:hidden;}
+  .progress-fill{height:100%;border-radius:999px;transition:width .5s;}
+  .checkbox{width:18px;height:18px;border-radius:6px;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;}
+  .checkbox.checked{background:var(--accent);border-color:var(--accent);}
+  .scroll::-webkit-scrollbar{width:6px;height:6px;} .scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:10px;}
+  ::selection{background:var(--accent-soft);}
+  @media (max-width: 767px){ .sidebar{display:none !important;} }
+  @media (min-width: 768px){ .mobile-nav{display:none !important;} }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef } = React;
+
+/* ---------- persistence (this is a real downloaded app, so localStorage is fair game) ---------- */
+function useLocal(key, initial) {
+  const [v, setV] = useState(() => {
+    try { const raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : initial; } catch { return initial; }
+  });
+  useEffect(() => { try { localStorage.setItem(key, JSON.stringify(v)); } catch {} }, [key, v]);
+  return [v, setV];
+}
+const uid = () => Math.random().toString(36).slice(2, 10);
+const todayStr = () => new Date().toISOString().slice(0, 10);
+const timeNow = () => { const d = new Date(); return d.getHours()*60 + d.getMinutes(); };
+const toMin = (t) => { const [h,m] = t.split(":").map(Number); return h*60+m; };
+const fmtMin = (m) => { const h=Math.floor(m/60), mm=m%60, ap=h>=12?"PM":"AM", hh=h%12===0?12:h%12; return `${hh}:${mm.toString().padStart(2,"0")} ${ap}`; };
+
+const CATEGORY_META = { Academics:{color:"#5aa895"}, Fitness:{color:"#e2604f"}, Business:{color:"#c9a24d"}, Career:{color:"#8b7fd6"}, Personal:{color:"#6fb2e0"}, Certification:{color:"#d68fb0"} };
+
+const WEEKDAY_ROUTINE = [
+  {start:"06:00",end:"06:15",label:"Wake up + hydrate",category:"Personal"},
+  {start:"06:15",end:"07:00",label:"Exercise (45 min)",category:"Fitness"},
+  {start:"07:00",end:"07:30",label:"Shower + get ready",category:"Personal"},
+  {start:"07:30",end:"08:00",label:"Breakfast",category:"Personal"},
+  {start:"08:00",end:"14:00",label:"Classes",category:"Academics",fixed:true},
+  {start:"14:00",end:"14:30",label:"Lunch",category:"Personal",fixed:true},
+  {start:"14:30",end:"15:00",label:"Short rest / commute",category:"Personal"},
+  {start:"15:00",end:"17:00",label:"Study / Academic block (2 hrs — split if needed)",category:"Academics"},
+  {start:"17:00",end:"18:00",label:"Stationery business work",category:"Business"},
+  {start:"18:00",end:"19:00",label:"Placement prep / certifications",category:"Career"},
+  {start:"19:00",end:"20:00",label:"Free time / personal growth",category:"Personal"},
+  {start:"20:00",end:"20:30",label:"Wind down, get ready",category:"Personal"},
+  {start:"20:30",end:"23:00",label:"Dinner + social time (out)",category:"Personal",fixed:true},
+  {start:"23:00",end:"23:30",label:"Journal + plan tomorrow",category:"Personal"},
+  {start:"23:30",end:"24:00",label:"Sleep",category:"Personal"},
+];
+const WEEKEND_ROUTINE = [
+  {start:"07:00",end:"07:15",label:"Wake up + hydrate",category:"Personal"},
+  {start:"07:15",end:"08:00",label:"Exercise (45 min)",category:"Fitness"},
+  {start:"08:00",end:"08:45",label:"Breakfast + free time",category:"Personal"},
+  {start:"08:45",end:"10:45",label:"Study / Academic block (2 hrs — split if needed)",category:"Academics"},
+  {start:"10:45",end:"13:00",label:"Stationery business work",category:"Business"},
+  {start:"13:00",end:"14:00",label:"Lunch",category:"Personal"},
+  {start:"14:00",end:"16:00",label:"Certifications / placement prep",category:"Career"},
+  {start:"16:00",end:"18:00",label:"Personal growth / errands",category:"Personal"},
+  {start:"18:00",end:"20:30",label:"Free time / social life",category:"Personal"},
+  {start:"20:30",end:"23:00",label:"Dinner + social time (out)",category:"Personal",fixed:true},
+  {start:"23:00",end:"23:30",label:"Journal + plan tomorrow",category:"Personal"},
+  {start:"23:30",end:"24:00",label:"Sleep",category:"Personal"},
+];
+const DIET_PLAN = [
+  {meal:"Early Morning",time:"6:00 AM",items:"Warm water + soaked almonds (5–6)",kcal:60},
+  {meal:"Breakfast",time:"7:30 AM",items:"2 eggs / poha or oats + 1 fruit + tea/coffee",kcal:400},
+  {meal:"Mid-Morning",time:"11:00 AM",items:"Buttermilk or a handful of nuts",kcal:120},
+  {meal:"Lunch",time:"2:00 PM",items:"2 roti/1 cup rice + dal + sabzi + salad + curd",kcal:650},
+  {meal:"Evening Snack",time:"5:30 PM",items:"Sprouts / roasted chana / fruit",kcal:180},
+  {meal:"Dinner",time:"8:30 PM",items:"Light — grilled protein or dal + sabzi + 1 roti/salad",kcal:550},
+  {meal:"Water intake target",time:"All day",items:"3–3.5 litres",kcal:0},
+];
+const DIET_TARGET_KCAL = DIET_PLAN.reduce((s,m)=>s+m.kcal,0);
+const QUOTES = [
+  "Discipline is choosing between what you want now and what you want most.",
+  "You don't rise to the level of your goals; you fall to the level of your systems.",
+  "Small daily improvements are the key to staggering long-term results.",
+  "The two hours you protect today are the degree, the business, and the offer of tomorrow.",
+  "Energy, not time, is your scarcest resource. Spend it on purpose.",
+];
+const ICONS = { grid:"▦", tasks:"☑", clock:"◷", health:"♥", habit:"🔥", calendar:"▤", focus:"◎", goal:"◈", business:"◫", journal:"✎", settings:"⚙", plus:"+", trash:"✕", check:"✓" };
+
+function getCurrentRoutineBlock() {
+  const isWeekday = [1,2,3,4,5].includes(new Date().getDay());
+  const routine = isWeekday ? WEEKDAY_ROUTINE : WEEKEND_ROUTINE;
+  const now = timeNow();
+  return routine.find(b => now >= toMin(b.start) && now < toMin(b.end)) || null;
+}
+
+function App() {
+  const [tab, setTab] = useState("dashboard");
+  const [tasks, setTasks] = useLocal("ht_tasks", []);
+  const [habits, setHabits] = useLocal("ht_habits", [
+    {id:uid(),name:"Exercise",color:"#e2604f",streak:0,longest:0,history:Array(36).fill(0)},
+    {id:uid(),name:"Study 2h",color:"#5aa895",streak:0,longest:0,history:Array(36).fill(0)},
+    {id:uid(),name:"Reading",color:"#8b7fd6",streak:0,longest:0,history:Array(36).fill(0)},
+    {id:uid(),name:"Water Intake",color:"#6fb2e0",streak:0,longest:0,history:Array(36).fill(0)},
+    {id:uid(),name:"No Social Media (post 11PM)",color:"#d68fb0",streak:0,longest:0,history:Array(36).fill(0)},
+  ]);
+  const [goals, setGoals] = useLocal("ht_goals", []);
+  const [business, setBusiness] = useLocal("ht_business", {leads:[],orders:[],content:[],ideas:[]});
+  const [journal, setJournal] = useLocal("ht_journal", []);
+  const [foodLog, setFoodLog] = useLocal("ht_food", []);
+  const [activityLog, setActivityLog] = useLocal("ht_activity", []);
+  const [xp, setXp] = useLocal("ht_xp", 0);
+  const [quote] = useState(QUOTES[Math.floor(Math.random()*QUOTES.length)]);
+  const level = Math.floor(xp/500)+1, xpIntoLevel = xp%500;
+
+  const todayTasks = tasks.filter(t=>t.deadline===todayStr());
+  const todayFood = foodLog.filter(f=>f.date===todayStr());
+  const todayActivity = activityLog.filter(a=>a.date===todayStr());
+  const caloriesConsumedToday = todayFood.reduce((s,f)=>s+f.kcal,0);
+  const caloriesBurntToday = todayActivity.reduce((s,a)=>s+a.kcal,0);
+  const exerciseHabit = habits.find(h=>h.name==="Exercise");
+  const exerciseDoneToday = exerciseHabit && exerciseHabit.history[exerciseHabit.history.length-1]===1;
+  const completedToday = todayTasks.filter(t=>t.status==="Completed").length;
+  const productivityScore = useMemo(()=>{
+    const taskScore = todayTasks.length ? (completedToday/todayTasks.length)*50 : 25;
+    const habitScore = habits.length ? (habits.filter(h=>h.history[h.history.length-1]===1).length/habits.length)*50 : 0;
+    return Math.round(taskScore+habitScore);
+  },[tasks,habits]);
+
+  function addTask(t){ setTasks(ts=>[{...t,id:uid(),status:"Pending"},...ts]); }
+  function toggleTaskDone(id){ setTasks(ts=>ts.map(t=>{ if(t.id!==id) return t; const done=t.status!=="Completed"; if(done) setXp(x=>x+25); return {...t,status:done?"Completed":"Pending",progress:done?100:t.progress}; })); }
+  function deleteTask(id){ setTasks(ts=>ts.filter(t=>t.id!==id)); }
+  function toggleHabitToday(id){ setHabits(hs=>hs.map(h=>{ if(h.id!==id) return h; const hist=[...h.history]; const last=hist.length-1; const was=hist[last]===1; hist[last]=was?0:1; if(!was) setXp(x=>x+15); return {...h,history:hist,streak:was?Math.max(0,h.streak-1):h.streak+1,longest:Math.max(h.longest,was?h.streak-1:h.streak+1)}; })); }
+  function addFood(e){ setFoodLog(l=>[{...e,id:uid(),date:todayStr()},...l]); setXp(x=>x+5); }
+  function deleteFood(id){ setFoodLog(l=>l.filter(f=>f.id!==id)); }
+  function addActivity(e){ setActivityLog(l=>[{...e,id:uid(),date:todayStr()},...l]); setXp(x=>x+10); }
+  function deleteActivity(id){ setActivityLog(l=>l.filter(a=>a.id!==id)); }
+
+  const NAV = [
+    {id:"dashboard",label:"Dashboard",icon:ICONS.grid},
+    {id:"tasks",label:"Tasks",icon:ICONS.tasks},
+    {id:"routine",label:"Day Routine",icon:ICONS.clock},
+    {id:"health",label:"Health",icon:ICONS.health},
+    {id:"habits",label:"Habits",icon:ICONS.habit},
+    {id:"focus",label:"Focus Mode",icon:ICONS.focus},
+    {id:"goals",label:"Goals",icon:ICONS.goal},
+    {id:"business",label:"Business",icon:ICONS.business},
+    {id:"journal",label:"Journal",icon:ICONS.journal},
+  ];
+
+  return (
+    <div style={{display:"flex",minHeight:"100vh"}}>
+      <aside className="sidebar scroll" style={{width:224,flexShrink:0,borderRight:"1px solid var(--border-soft)",padding:"22px 14px",position:"sticky",top:0,height:"100vh",overflowY:"auto"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"4px 8px 22px"}}>
+          <div style={{width:34,height:34,borderRadius:10,background:"var(--accent)",display:"flex",alignItems:"center",justifyContent:"center",color:"#1a1608",fontWeight:800}}>H</div>
+          <div>
+            <div className="font-display" style={{fontSize:16,fontWeight:600}}>Habit-Tracker</div>
+            <div style={{fontSize:10,color:"var(--text-faint)",letterSpacing:".06em"}}>YOUR DAILY OS</div>
+          </div>
+        </div>
+        <nav style={{display:"flex",flexDirection:"column",gap:3}}>
+          {NAV.map(n=>(
+            <div key={n.id} className={`nav-item ${tab===n.id?"active":""}`} onClick={()=>setTab(n.id)}>
+              <span style={{width:16,textAlign:"center"}}>{n.icon}</span> {n.label}
+            </div>
+          ))}
+        </nav>
+        <div className="card" style={{marginTop:24,padding:14}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span style={{fontSize:12,fontWeight:700}}>Level {level}</span><span style={{fontSize:11}}>★</span></div>
+          <div className="progress-track"><div className="progress-fill" style={{width:`${(xpIntoLevel/500)*100}%`,background:"var(--accent)"}}/></div>
+          <div style={{fontSize:10,color:"var(--text-faint)",marginTop:6}}>{xpIntoLevel} / 500 XP</div>
+        </div>
+        <div style={{fontSize:10,color:"var(--text-faint)",marginTop:16,padding:"0 8px"}}>Data is saved locally in this browser.</div>
+      </aside>
+
+      <main style={{flex:1,minWidth:0,paddingBottom:90}}>
+        <div style={{position:"sticky",top:0,zIndex:20,background:"rgba(14,16,21,0.9)",backdropFilter:"blur(10px)",borderBottom:"1px solid var(--border-soft)",padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div className="font-display" style={{fontSize:21,fontWeight:600}}>{NAV.find(n=>n.id===tab)?.label || "Settings"}</div>
+            <div style={{fontSize:12,color:"var(--text-faint)"}}>{new Date().toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long"})}</div>
+          </div>
+          <div className="btn" onClick={()=>setTab("settings")}>{ICONS.settings} Settings</div>
+        </div>
+        <div style={{padding:"18px 20px 40px"}}>
+          {tab==="dashboard" && <Dashboard tasks={todayTasks} allTasks={tasks} habits={habits} productivityScore={productivityScore} quote={quote} exerciseDoneToday={exerciseDoneToday} caloriesBurntToday={caloriesBurntToday} caloriesConsumedToday={caloriesConsumedToday} toggleTaskDone={toggleTaskDone} toggleHabitToday={toggleHabitToday} setTab={setTab} addTask={addTask} />}
+          {tab==="tasks" && <TasksView tasks={tasks} toggleTaskDone={toggleTaskDone} deleteTask={deleteTask} addTask={addTask} />}
+          {tab==="routine" && <RoutineView />}
+          {tab==="health" && <HealthView foodLog={todayFood} activityLog={todayActivity} caloriesConsumedToday={caloriesConsumedToday} caloriesBurntToday={caloriesBurntToday} addFood={addFood} deleteFood={deleteFood} addActivity={addActivity} deleteActivity={deleteActivity} />}
+          {tab==="habits" && <HabitsView habits={habits} toggleHabitToday={toggleHabitToday} setHabits={setHabits} />}
+          {tab==="focus" && <FocusView onSessionComplete={(m)=>setXp(x=>x+Math.round(m))} />}
+          {tab==="goals" && <GoalsView goals={goals} setGoals={setGoals} />}
+          {tab==="business" && <BusinessView business={business} setBusiness={setBusiness} />}
+          {tab==="journal" && <JournalView journal={journal} setJournal={setJournal} />}
+          {tab==="settings" && <SettingsView habits={habits} setHabits={setHabits} tasks={tasks} setTasks={setTasks} goals={goals} setGoals={setGoals} foodLog={foodLog} setFoodLog={setFoodLog} activityLog={activityLog} setActivityLog={setActivityLog} journal={journal} setJournal={setJournal} business={business} setBusiness={setBusiness} setXp={setXp} />}
+        </div>
+      </main>
+
+      <div className="mobile-nav" style={{position:"fixed",bottom:0,left:0,right:0,background:"var(--surface)",borderTop:"1px solid var(--border-soft)",display:"flex",justifyContent:"space-around",padding:"8px 4px 10px",zIndex:40}}>
+        {NAV.slice(0,5).map(n=>(
+          <div key={n.id} onClick={()=>setTab(n.id)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,color:tab===n.id?"var(--accent)":"var(--text-faint)",fontSize:9,fontWeight:600}}>
+            <span style={{fontSize:16}}>{n.icon}</span>{n.label.split(" ")[0]}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function StatCard({label,value,color,onClick,small}) {
+  return (
+    <div className="card" style={{padding:16,cursor:onClick?"pointer":"default"}} onClick={onClick}>
+      <div className="label" style={{marginBottom:10}}>{label}</div>
+      <div className="font-display" style={{fontSize:small?15:22,fontWeight:600,color}}>{value}</div>
+    </div>
+  );
+}
+function EmptyState({text}){ return <div className="card" style={{padding:22,textAlign:"center",color:"var(--text-faint)",fontSize:12.5}}>{text}</div>; }
+
+function Dashboard({tasks,allTasks,habits,productivityScore,quote,exerciseDoneToday,caloriesBurntToday,caloriesConsumedToday,toggleTaskDone,toggleHabitToday,setTab,addTask}) {
+  const upcoming = allTasks.filter(t=>t.status!=="Completed").sort((a,b)=>a.deadline.localeCompare(b.deadline)).slice(0,4);
+  const currentBlock = getCurrentRoutineBlock();
+  const [val,setVal] = useState("");
+  function submit(){ if(!val.trim()) return; addTask({title:val.trim(),category:"Personal",priority:"Medium",deadline:todayStr(),duration:30,progress:0}); setVal(""); }
+
+  return (
+    <div style={{display:"grid",gap:16}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12}}>
+        <StatCard label="Productivity Score" value={`${productivityScore}%`} color="var(--accent)" />
+        <StatCard label="Calories Burnt" value={`${caloriesBurntToday} kcal`} color="var(--danger)" />
+        <StatCard label="Exercise" value={exerciseDoneToday?"Done ✓":"Pending"} color={exerciseDoneToday?"var(--accent-2)":"var(--danger)"} />
+        <StatCard label="Day Routine" value={currentBlock?currentBlock.label:"Free time"} color="var(--violet)" onClick={()=>setTab("routine")} small />
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"minmax(0,1.2fr) minmax(0,1fr)",gap:16}} className="dash-grid">
+        <div className="card" style={{padding:20}}>
+          <div className="font-display" style={{fontSize:16,fontWeight:600,marginBottom:14}}>To-Do List</div>
+          <div style={{display:"flex",gap:8}}>
+            <input className="input" placeholder="Add a task for today…" value={val} onChange={e=>setVal(e.target.value)} onKeyDown={e=>e.key==="Enter"&&submit()} />
+            <div className="btn btn-accent" onClick={submit}>{ICONS.plus}</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:12,maxHeight:380,overflowY:"auto"}} className="scroll">
+            {tasks.length===0 && <EmptyState text="Nothing added yet — add today's first task above." />}
+            {tasks.filter(t=>t.status!=="Completed").map(t=>(
+              <div key={t.id} className="card" style={{padding:"9px 12px",display:"flex",alignItems:"center",gap:9,borderLeft:`3px solid ${CATEGORY_META[t.category]?.color||"var(--accent)"}`}}>
+                <div className="checkbox" onClick={()=>toggleTaskDone(t.id)} />
+                <span style={{fontSize:13}}>{t.title}</span>
+                <span className="tag" style={{marginLeft:"auto",background:"var(--surface-2)",color:"var(--text-faint)"}}>{t.category}</span>
+              </div>
+            ))}
+            {tasks.filter(t=>t.status==="Completed").map(t=>(
+              <div key={t.id} style={{display:"flex",alignItems:"center",gap:9,opacity:.45,padding:"4px 12px"}}>
+                <div className="checkbox checked" onClick={()=>toggleTaskDone(t.id)}>{ICONS.check}</div>
+                <span style={{fontSize:13,textDecoration:"line-through"}}>{t.title}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+          <div className="card" style={{padding:18}}>
+            <div className="font-display" style={{fontSize:14.5,fontStyle:"italic"}}>"{quote}"</div>
+          </div>
+          <div className="card" style={{padding:18}}>
+            <div className="label" style={{marginBottom:12}}>Habit Streaks</div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {habits.slice(0,4).map(h=>(
+                <div key={h.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div className={`checkbox ${h.history[h.history.length-1]?"checked":""}`} onClick={()=>toggleHabitToday(h.id)}>{h.history[h.history.length-1]?ICONS.check:null}</div>
+                    <span style={{fontSize:13}}>{h.name}</span>
+                  </div>
+                  <span style={{fontSize:11,color:"var(--text-faint)"}}>🔥 {h.streak}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="card" style={{padding:18}}>
+            <div className="label" style={{marginBottom:12}}>Calories Today</div>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:6}}><span>Consumed</span><b>{caloriesConsumedToday} kcal</b></div>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:10}}><span>Burnt</span><b>{caloriesBurntToday} kcal</b></div>
+            <div className="btn" style={{width:"100%",justifyContent:"center"}} onClick={()=>setTab("health")}>Log food / activity</div>
+          </div>
+          <div className="card" style={{padding:18}}>
+            <div className="label" style={{marginBottom:12}}>Upcoming Deadlines</div>
+            <div style={{display:"flex",flexDirection:"column",gap:9}}>
+              {upcoming.map(t=>(<div key={t.id} style={{display:"flex",justifyContent:"space-between",fontSize:12.5}}><span>{t.title.length>30?t.title.slice(0,30)+"…":t.title}</span><span style={{color:"var(--text-faint)"}}>{t.deadline===todayStr()?"Today":t.deadline}</span></div>))}
+              {upcoming.length===0 && <span style={{fontSize:12,color:"var(--text-faint)"}}>Nothing pending yet.</span>}
+            </div>
+          </div>
+        </div>
+      </div>
+      <style>{`@media(max-width:860px){.dash-grid{grid-template-columns:1fr!important;}}`}</style>
+    </div>
+  );
+}
+
+function TasksView({tasks,toggleTaskDone,deleteTask,addTask}) {
+  const [filter,setFilter] = useState("All");
+  const [showModal,setShowModal] = useState(false);
+  const cats = ["All",...Object.keys(CATEGORY_META)];
+  const filtered = filter==="All"?tasks:tasks.filter(t=>t.category===filter);
+  const pending = filtered.filter(t=>t.status!=="Completed"), done = filtered.filter(t=>t.status==="Completed");
+  return (
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:8,marginBottom:18}}>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {cats.map(c=>(<div key={c} className="btn" style={{background:filter===c?"var(--accent-soft)":"var(--surface-2)",color:filter===c?"var(--accent)":"var(--text-dim)"}} onClick={()=>setFilter(c)}>{c}</div>))}
+        </div>
+        <div className="btn btn-accent" onClick={()=>setShowModal(true)}>{ICONS.plus} New Task</div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:12}}>
+        <div>
+          <div className="label" style={{marginBottom:10}}>Pending — {pending.length}</div>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {pending.map(t=><TaskCard key={t.id} t={t} toggleTaskDone={toggleTaskDone} deleteTask={deleteTask} />)}
+            {pending.length===0 && <EmptyState text="No pending tasks in this category." />}
+          </div>
+        </div>
+        <div>
+          <div className="label" style={{marginBottom:10}}>Completed — {done.length}</div>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>{done.map(t=><TaskCard key={t.id} t={t} toggleTaskDone={toggleTaskDone} deleteTask={deleteTask} />)}</div>
+        </div>
+      </div>
+      {showModal && <TaskModal onClose={()=>setShowModal(false)} onSave={(t)=>{addTask(t);setShowModal(false);}} />}
+    </div>
+  );
+}
+function TaskCard({t,toggleTaskDone,deleteTask}) {
+  const color = CATEGORY_META[t.category]?.color || "var(--accent)";
+  const pc = t.priority==="High"?"var(--danger)":t.priority==="Medium"?"var(--accent)":"var(--text-faint)";
+  return (
+    <div className="card" style={{padding:14,borderLeft:`3px solid ${color}`,opacity:t.status==="Completed"?.55:1}}>
+      <div style={{display:"flex",gap:10}}>
+        <div className={`checkbox ${t.status==="Completed"?"checked":""}`} onClick={()=>toggleTaskDone(t.id)} style={{marginTop:2}}>{t.status==="Completed"?ICONS.check:null}</div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
+            <span style={{fontSize:13.5,fontWeight:600,textDecoration:t.status==="Completed"?"line-through":"none"}}>{t.title}</span>
+            <span style={{cursor:"pointer",color:"var(--text-faint)"}} onClick={()=>deleteTask(t.id)}>{ICONS.trash}</span>
+          </div>
+          {t.desc && <div style={{fontSize:12,color:"var(--text-dim)",marginTop:3}}>{t.desc}</div>}
+          <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap",alignItems:"center"}}>
+            <span className="tag" style={{background:"var(--surface-2)",color}}>{t.category}</span>
+            <span className="tag" style={{background:"var(--surface-2)",color:pc}}>{t.priority}</span>
+            <span style={{fontSize:11,color:"var(--text-faint)"}}>{t.duration}m · {t.deadline===todayStr()?"Today":t.deadline}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+function TaskModal({onClose,onSave}) {
+  const [f,setF] = useState({title:"",desc:"",category:"Academics",priority:"Medium",deadline:todayStr(),duration:30,progress:0});
+  const set=(k,v)=>setF(s=>({...s,[k]:v}));
+  return (
+    <div style={{position:"fixed",inset:0,background:"#000a",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:16}} onClick={onClose}>
+      <div className="card" style={{width:440,maxWidth:"100%",padding:22,background:"var(--surface-2)"}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}>
+          <div className="font-display" style={{fontSize:17,fontWeight:600}}>New Task</div>
+          <span style={{cursor:"pointer"}} onClick={onClose}>✕</span>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <input className="input" placeholder="Task title" value={f.title} onChange={e=>set("title",e.target.value)} />
+          <input className="input" placeholder="Description (optional)" value={f.desc} onChange={e=>set("desc",e.target.value)} />
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <select className="input" value={f.category} onChange={e=>set("category",e.target.value)}>{Object.keys(CATEGORY_META).map(c=><option key={c}>{c}</option>)}</select>
+            <select className="input" value={f.priority} onChange={e=>set("priority",e.target.value)}><option>High</option><option>Medium</option><option>Low</option></select>
+            <input type="date" className="input" value={f.deadline} onChange={e=>set("deadline",e.target.value)} />
+            <input type="number" className="input" placeholder="Duration (min)" value={f.duration} onChange={e=>set("duration",Number(e.target.value))} />
+          </div>
+          <div className="btn btn-accent" style={{justifyContent:"center"}} onClick={()=>f.title&&onSave(f)}>Create Task</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RoutineView() {
+  const isWeekdayToday = [1,2,3,4,5].includes(new Date().getDay());
+  const [mode,setMode] = useState(isWeekdayToday?"Weekday":"Weekend");
+  const routine = mode==="Weekday"?WEEKDAY_ROUTINE:WEEKEND_ROUTINE;
+  const now = timeNow();
+  return (
+    <div>
+      <div style={{display:"flex",gap:8,marginBottom:18}}>
+        {["Weekday","Weekend"].map(m=>(<div key={m} className="btn" style={{background:mode===m?"var(--accent-soft)":"var(--surface-2)",color:mode===m?"var(--accent)":"var(--text-dim)"}} onClick={()=>setMode(m)}>{m}</div>))}
+      </div>
+      <div className="card" style={{padding:20,position:"relative",paddingLeft:30}}>
+        <div style={{position:"absolute",left:15,top:24,bottom:24,width:2,background:"var(--border)"}} />
+        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+          {routine.map((b,i)=>{
+            const start=toMin(b.start), end=toMin(b.end==="24:00"?"23:59":b.end);
+            const active = mode===(isWeekdayToday?"Weekday":"Weekend") && now>=start && now<end;
+            const past = mode===(isWeekdayToday?"Weekday":"Weekend") && now>=end;
+            const color = CATEGORY_META[b.category]?.color || "var(--accent)";
+            return (
+              <div key={i} style={{position:"relative",opacity:past?.5:1}}>
+                <div style={{position:"absolute",left:-19,top:3,width:12,height:12,borderRadius:"50%",background:color,border:active?"2px solid var(--text)":"2px solid var(--bg)"}} />
+                <div className="font-mono" style={{fontSize:11,color:"var(--text-faint)",marginBottom:3}}>{fmtMin(start)} – {fmtMin(end)}</div>
+                <div style={{display:"flex",alignItems:"center",gap:8,fontSize:13.5,fontWeight:600,flexWrap:"wrap"}}>
+                  {b.label}
+                  <span className="tag" style={{background:color+"22",color}}>{b.category}</span>
+                  {b.fixed && <span className="tag" style={{background:"var(--surface-2)",color:"var(--text-faint)"}}>fixed</span>}
+                  {active && <span className="tag" style={{background:"var(--accent)",color:"#1a1608"}}>now</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div style={{fontSize:11.5,color:"var(--text-faint)",marginTop:12}}>Classes, lunch, and dinner are fixed. The Study/Academic block is exactly 2 hours — split it into shorter sessions whenever it suits your day better.</div>
+    </div>
+  );
+}
+
+function HealthView({foodLog,activityLog,caloriesConsumedToday,caloriesBurntToday,addFood,deleteFood,addActivity,deleteActivity}) {
+  const [fn,setFn]=useState(""), [fk,setFk]=useState(""), [an,setAn]=useState(""), [ak,setAk]=useState("");
+  const net = caloriesConsumedToday - caloriesBurntToday;
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:18}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(160px,1fr))",gap:12}}>
+        <StatCard label="Consumed Today" value={`${caloriesConsumedToday} kcal`} color="var(--accent)" />
+        <StatCard label="Burnt Today" value={`${caloriesBurntToday} kcal`} color="var(--danger)" />
+        <StatCard label="Net" value={`${net>=0?"+":""}${net} kcal`} color="var(--accent-2)" />
+        <StatCard label="Diet Plan Target" value={`~${DIET_TARGET_KCAL} kcal`} color="var(--violet)" />
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:16}}>
+        <div className="card" style={{padding:18}}>
+          <div className="font-display" style={{fontSize:15,fontWeight:600,marginBottom:4}}>Suggested Diet Plan</div>
+          <div style={{fontSize:11.5,color:"var(--text-faint)",marginBottom:14}}>A balanced starting template — adjust portions to your needs.</div>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {DIET_PLAN.map((m,i)=>(
+              <div key={i} style={{display:"flex",justifyContent:"space-between",gap:10,paddingBottom:10,borderBottom:i<DIET_PLAN.length-1?"1px solid var(--border-soft)":"none"}}>
+                <div><div style={{fontSize:13,fontWeight:600}}>{m.meal} <span style={{color:"var(--text-faint)",fontWeight:400}}>· {m.time}</span></div><div style={{fontSize:12,color:"var(--text-dim)",marginTop:2}}>{m.items}</div></div>
+                {m.kcal>0 && <span className="tag" style={{background:"var(--surface-2)",color:"var(--accent)",flexShrink:0}}>{m.kcal} kcal</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="card" style={{padding:18}}>
+          <div className="font-display" style={{fontSize:15,fontWeight:600,marginBottom:12}}>Today's Food Log</div>
+          <div style={{display:"flex",gap:8,marginBottom:12}}>
+            <input className="input" placeholder="What did you eat?" value={fn} onChange={e=>setFn(e.target.value)} />
+            <input className="input" style={{width:80}} type="number" placeholder="kcal" value={fk} onChange={e=>setFk(e.target.value)} />
+            <div className="btn btn-accent" onClick={()=>{if(fn&&fk){addFood({name:fn,kcal:Number(fk)});setFn("");setFk("");}}}>{ICONS.plus}</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {foodLog.map(f=>(<div key={f.id} style={{display:"flex",justifyContent:"space-between",fontSize:13,background:"var(--surface-2)",borderRadius:8,padding:"8px 10px"}}><span>{f.name}</span><div style={{display:"flex",gap:10,alignItems:"center"}}><span style={{color:"var(--text-faint)"}}>{f.kcal} kcal</span><span style={{cursor:"pointer",color:"var(--text-faint)"}} onClick={()=>deleteFood(f.id)}>{ICONS.trash}</span></div></div>))}
+            {foodLog.length===0 && <EmptyState text="Nothing logged yet today." />}
+          </div>
+        </div>
+        <div className="card" style={{padding:18}}>
+          <div className="font-display" style={{fontSize:15,fontWeight:600,marginBottom:12}}>Physical Activity Tracker</div>
+          <div style={{display:"flex",gap:8,marginBottom:12}}>
+            <input className="input" placeholder="Activity (e.g. gym, walk)" value={an} onChange={e=>setAn(e.target.value)} />
+            <input className="input" style={{width:80}} type="number" placeholder="kcal" value={ak} onChange={e=>setAk(e.target.value)} />
+            <div className="btn btn-accent" onClick={()=>{if(an&&ak){addActivity({name:an,kcal:Number(ak)});setAn("");setAk("");}}}>{ICONS.plus}</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {activityLog.map(a=>(<div key={a.id} style={{display:"flex",justifyContent:"space-between",fontSize:13,background:"var(--surface-2)",borderRadius:8,padding:"8px 10px"}}><span>{a.name}</span><div style={{display:"flex",gap:10,alignItems:"center"}}><span style={{color:"var(--text-faint)"}}>{a.kcal} kcal</span><span style={{cursor:"pointer",color:"var(--text-faint)"}} onClick={()=>deleteActivity(a.id)}>{ICONS.trash}</span></div></div>))}
+            {activityLog.length===0 && <EmptyState text="Log a workout or activity to track calories burnt." />}
+          </div>
+        </div>
+      </div>
+      <div style={{fontSize:11,color:"var(--text-faint)"}}>This diet plan is a general starting template, not medical advice — adjust it with a nutritionist if you have specific health needs.</div>
+    </div>
+  );
+}
+
+function HabitsView({habits,toggleHabitToday,setHabits}) {
+  const [showAdd,setShowAdd]=useState(false), [name,setName]=useState("");
+  function addHabit(){ if(!name.trim())return; setHabits(hs=>[...hs,{id:uid(),name,color:"#c9a24d",streak:0,longest:0,history:Array(36).fill(0)}]); setName("");setShowAdd(false); }
+  return (
+    <div>
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}><div className="btn" onClick={()=>setShowAdd(s=>!s)}>{ICONS.plus} Custom Habit</div></div>
+      {showAdd && <div className="card" style={{padding:12,marginBottom:14,display:"flex",gap:8}}><input className="input" placeholder="Habit name" value={name} onChange={e=>setName(e.target.value)} /><div className="btn btn-accent" onClick={addHabit}>Add</div></div>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))",gap:14}}>
+        {habits.map(h=>{
+          const doneToday = h.history[h.history.length-1]===1;
+          const last30 = h.history.slice(-30);
+          const completion = Math.round((last30.reduce((a,b)=>a+b,0)/last30.length)*100);
+          return (
+            <div key={h.id} className="card" style={{padding:16}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                <span style={{fontSize:13.5,fontWeight:600}}>{h.name}</span>
+                <div className={`checkbox ${doneToday?"checked":""}`} onClick={()=>toggleHabitToday(h.id)}>{doneToday?ICONS.check:null}</div>
+              </div>
+              <div style={{display:"flex",gap:16,marginBottom:12,fontSize:12}}>
+                <div><div style={{color:"var(--text-faint)"}}>Streak</div><div style={{fontWeight:700,color:h.color}}>{h.streak}d</div></div>
+                <div><div style={{color:"var(--text-faint)"}}>Longest</div><div style={{fontWeight:700}}>{h.longest}d</div></div>
+                <div><div style={{color:"var(--text-faint)"}}>30-day</div><div style={{fontWeight:700}}>{completion}%</div></div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(15,1fr)",gap:3}}>{last30.map((v,i)=><div key={i} style={{aspectRatio:"1",borderRadius:3,background:v?h.color:"var(--surface-3)"}} />)}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function FocusView({onSessionComplete}) {
+  const PRESETS={"25/5":[25,5],"50/10":[50,10]};
+  const [preset,setPreset]=useState("25/5");
+  const [phase,setPhase]=useState("focus");
+  const [focusMin,breakMin] = PRESETS[preset];
+  const [secondsLeft,setSecondsLeft]=useState(focusMin*60);
+  const [running,setRunning]=useState(false);
+  const [sessionsToday,setSessionsToday]=useLocal("ht_focus_sessions_"+todayStr(),0);
+  const [focusedMinutesToday,setFocusedMinutesToday]=useLocal("ht_focus_minutes_"+todayStr(),0);
+  const intervalRef=useRef(null);
+  useEffect(()=>{ setSecondsLeft((phase==="focus"?focusMin:breakMin)*60); },[preset]);
+  useEffect(()=>{
+    if(running){
+      intervalRef.current=setInterval(()=>{
+        setSecondsLeft(s=>{
+          if(s<=1){
+            if(phase==="focus"){ setFocusedMinutesToday(m=>m+focusMin); setSessionsToday(n=>n+1); onSessionComplete&&onSessionComplete(focusMin); setPhase("break"); return breakMin*60; }
+            else { setPhase("focus"); return focusMin*60; }
+          }
+          return s-1;
+        });
+      },1000);
+    }
+    return ()=>clearInterval(intervalRef.current);
+  },[running,phase,focusMin,breakMin]);
+  const total=(phase==="focus"?focusMin:breakMin)*60;
+  const pct=1-secondsLeft/total, mm=Math.floor(secondsLeft/60), ss=secondsLeft%60;
+  const r=90, circ=2*Math.PI*r;
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,300px)",gap:20}} className="focus-grid">
+      <div className="card" style={{padding:30,display:"flex",flexDirection:"column",alignItems:"center"}}>
+        <div style={{display:"flex",gap:8,marginBottom:24}}>
+          {Object.keys(PRESETS).map(p=>(<div key={p} className="btn" style={{background:preset===p?"var(--accent-soft)":"var(--surface-2)",color:preset===p?"var(--accent)":"var(--text-dim)"}} onClick={()=>{setPreset(p);setPhase("focus");setRunning(false);}}>{p}</div>))}
+        </div>
+        <div style={{position:"relative",width:220,height:220}}>
+          <svg width="220" height="220" style={{transform:"rotate(-90deg)"}}>
+            <circle cx="110" cy="110" r={r} stroke="var(--surface-3)" strokeWidth="10" fill="none" />
+            <circle cx="110" cy="110" r={r} stroke={phase==="focus"?"var(--accent)":"var(--accent-2)"} strokeWidth="10" fill="none" strokeDasharray={circ} strokeDashoffset={circ*(1-pct)} strokeLinecap="round" style={{transition:"stroke-dashoffset 1s linear"}} />
+          </svg>
+          <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+            <div className="font-mono" style={{fontSize:38,fontWeight:600}}>{mm}:{ss.toString().padStart(2,"0")}</div>
+            <div style={{fontSize:11,color:"var(--text-faint)",textTransform:"uppercase"}}>{phase==="focus"?"Focus":"Break"}</div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:10,marginTop:24}}>
+          <div className="btn btn-accent" onClick={()=>setRunning(r=>!r)}>{running?"Pause":"Start"}</div>
+          <div className="btn" onClick={()=>{setRunning(false);setSecondsLeft(total);}}>Reset</div>
+        </div>
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:14}}>
+        <StatCard label="Sessions Today" value={sessionsToday} color="var(--accent)" />
+        <StatCard label="Focused Minutes" value={`${focusedMinutesToday}m`} color="var(--accent-2)" />
+      </div>
+      <style>{`@media(max-width:760px){.focus-grid{grid-template-columns:1fr!important;}}`}</style>
+    </div>
+  );
+}
+
+function GoalsView({goals,setGoals}) {
+  const [showAdd,setShowAdd]=useState(false);
+  const [f,setF]=useState({title:"",period:"Monthly",deadline:todayStr()});
+  function addGoal(){ if(!f.title.trim())return; setGoals(g=>[...g,{id:uid(),...f,progress:0,milestones:[]}]); setF({title:"",period:"Monthly",deadline:todayStr()}); setShowAdd(false); }
+  function toggleMilestone(gId,idx){ setGoals(gs=>gs.map(g=>{ if(g.id!==gId)return g; const ms=g.milestones.map((m,i)=>i===idx?{...m,done:!m.done}:m); const progress=ms.length?Math.round((ms.filter(m=>m.done).length/ms.length)*100):0; return {...g,milestones:ms,progress}; })); }
+  function addMilestone(gId,text){ if(!text.trim())return; setGoals(gs=>gs.map(g=>g.id===gId?{...g,milestones:[...g.milestones,{t:text,done:false}]}:g)); }
+  return (
+    <div>
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}><div className="btn btn-accent" onClick={()=>setShowAdd(s=>!s)}>{ICONS.plus} New Goal</div></div>
+      {showAdd && (
+        <div className="card" style={{padding:14,marginBottom:16,display:"flex",gap:8,flexWrap:"wrap"}}>
+          <input className="input" style={{flex:1,minWidth:180}} placeholder="Goal title" value={f.title} onChange={e=>setF({...f,title:e.target.value})} />
+          <select className="input" style={{width:130}} value={f.period} onChange={e=>setF({...f,period:e.target.value})}><option>Yearly</option><option>Monthly</option><option>Weekly</option><option>Daily</option></select>
+          <input type="date" className="input" style={{width:150}} value={f.deadline} onChange={e=>setF({...f,deadline:e.target.value})} />
+          <div className="btn btn-accent" onClick={addGoal}>Add</div>
+        </div>
+      )}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(300px,1fr))",gap:14}}>
+        {goals.map(g=>(
+          <GoalCard key={g.id} g={g} toggleMilestone={toggleMilestone} addMilestone={addMilestone} />
+        ))}
+        {goals.length===0 && <EmptyState text="No goals yet — add your first one above." />}
+      </div>
+    </div>
+  );
+}
+function GoalCard({g,toggleMilestone,addMilestone}) {
+  const [ms,setMs]=useState("");
+  return (
+    <div className="card" style={{padding:18}}>
+      <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+        <span className="tag" style={{background:"var(--accent-soft)",color:"var(--accent)"}}>{g.period}</span>
+        <span style={{fontSize:11,color:"var(--text-faint)"}}>due {g.deadline}</span>
+      </div>
+      <div style={{fontSize:14.5,fontWeight:600,margin:"8px 0 10px"}}>{g.title}</div>
+      <div className="progress-track" style={{marginBottom:4}}><div className="progress-fill" style={{width:`${g.progress}%`,background:"var(--accent)"}} /></div>
+      <div style={{fontSize:11,color:"var(--text-faint)",marginBottom:12}}>{g.progress}% complete</div>
+      <div style={{display:"flex",flexDirection:"column",gap:7,marginBottom:10}}>
+        {g.milestones.map((m,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}} onClick={()=>toggleMilestone(g.id,i)}><div className={`checkbox ${m.done?"checked":""}`}>{m.done?ICONS.check:null}</div><span style={{fontSize:12.5,textDecoration:m.done?"line-through":"none",color:m.done?"var(--text-faint)":"var(--text)"}}>{m.t}</span></div>))}
+      </div>
+      <div style={{display:"flex",gap:6}}>
+        <input className="input" placeholder="Add milestone" value={ms} onChange={e=>setMs(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){addMilestone(g.id,ms);setMs("");}}} />
+        <div className="btn" onClick={()=>{addMilestone(g.id,ms);setMs("");}}>{ICONS.plus}</div>
+      </div>
+    </div>
+  );
+}
+
+function BusinessView({business,setBusiness}) {
+  const cols=[{key:"leads",label:"Leads / Retailer Follow-ups"},{key:"orders",label:"Orders & Payments"},{key:"content",label:"Instagram / Marketing Content"},{key:"ideas",label:"Business Ideas"}];
+  const [inputs,setInputs]=useState({leads:"",orders:"",content:"",ideas:""});
+  function addItem(key){ const v=inputs[key]; if(!v.trim())return; setBusiness(b=>({...b,[key]:[...b[key],{id:uid(),name:v}]})); setInputs(s=>({...s,[key]:""})); }
+  function removeItem(key,id){ setBusiness(b=>({...b,[key]:b[key].filter(i=>i.id!==id)})); }
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",gap:14}}>
+      {cols.map(c=>(
+        <div key={c.key} className="card" style={{padding:16}}>
+          <div className="label" style={{marginBottom:12}}>{c.label}</div>
+          <div style={{display:"flex",gap:6,marginBottom:10}}>
+            <input className="input" placeholder="Add item…" value={inputs[c.key]} onChange={e=>setInputs(s=>({...s,[c.key]:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addItem(c.key)} />
+            <div className="btn" onClick={()=>addItem(c.key)}>{ICONS.plus}</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {business[c.key].map(item=>(<div key={item.id} className="card" style={{padding:10,background:"var(--surface-2)",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:12.5}}>{item.name}</span><span style={{cursor:"pointer",color:"var(--text-faint)"}} onClick={()=>removeItem(c.key,item.id)}>{ICONS.trash}</span></div>))}
+            {business[c.key].length===0 && <div style={{fontSize:11.5,color:"var(--text-faint)"}}>Nothing here yet.</div>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function JournalView({journal,setJournal}) {
+  const [form,setForm]=useState({mood:"🙂",energy:3,wins:"",challenges:"",gratitude:"",tomorrow:""});
+  const MOODS=["😄","🙂","😐","😔","😤"];
+  function save(){ setJournal(j=>[{...form,id:uid(),date:todayStr()},...j.filter(e=>e.date!==todayStr())]); }
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"minmax(0,1fr) minmax(0,300px)",gap:20}} className="journal-grid">
+      <div className="card" style={{padding:20}}>
+        <div className="font-display" style={{fontSize:16,fontWeight:600,marginBottom:16}}>Today's Entry</div>
+        <div className="label" style={{marginBottom:8}}>Mood</div>
+        <div style={{display:"flex",gap:8,marginBottom:16}}>{MOODS.map(m=>(<div key={m} onClick={()=>setForm(f=>({...f,mood:m}))} style={{fontSize:22,cursor:"pointer",padding:6,borderRadius:10,background:form.mood===m?"var(--accent-soft)":"transparent"}}>{m}</div>))}</div>
+        <div className="label" style={{marginBottom:8}}>Energy — {form.energy}/5</div>
+        <input type="range" min="1" max="5" value={form.energy} onChange={e=>setForm(f=>({...f,energy:Number(e.target.value)}))} style={{width:"100%",marginBottom:16}} />
+        {[["wins","Wins today"],["challenges","Challenges"],["gratitude","Gratitude"],["tomorrow","Tomorrow's priorities"]].map(([k,label])=>(
+          <div key={k} style={{marginBottom:12}}><div className="label" style={{marginBottom:5}}>{label}</div><textarea className="input" rows={2} value={form[k]} onChange={e=>setForm(f=>({...f,[k]:e.target.value}))} /></div>
+        ))}
+        <div className="btn btn-accent" onClick={save}>Save Entry</div>
+      </div>
+      <div>
+        <div className="label" style={{marginBottom:10}}>Past Entries</div>
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {journal.map(e=>(<div key={e.id} className="card" style={{padding:12}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:18}}>{e.mood}</span><span style={{fontSize:11,color:"var(--text-faint)"}}>{e.date}</span></div>{e.wins&&<div style={{fontSize:12,color:"var(--text-dim)"}}>Win: {e.wins}</div>}</div>))}
+          {journal.length===0 && <EmptyState text="Your reflections will appear here." />}
+        </div>
+      </div>
+      <style>{`@media(max-width:760px){.journal-grid{grid-template-columns:1fr!important;}}`}</style>
+    </div>
+  );
+}
+
+function SettingsView({habits,setHabits}) {
+  const [notifPermission,setNotifPermission]=useState(typeof Notification!=="undefined"?Notification.permission:"unsupported");
+  function resetAllData(){
+    if(confirm("This clears all locally saved data (tasks, habits, logs, journal). Continue?")){
+      Object.keys(localStorage).filter(k=>k.startsWith("ht_")).forEach(k=>localStorage.removeItem(k));
+      location.reload();
+    }
+  }
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(320px,1fr))",gap:16}}>
+      <div className="card" style={{padding:18}}>
+        <div className="font-display" style={{fontSize:15,fontWeight:600,marginBottom:14}}>Notifications</div>
+        <div className="btn" onClick={()=>{ if(typeof Notification==="undefined")return; Notification.requestPermission().then(setNotifPermission); }}>Enable browser notifications ({notifPermission})</div>
+      </div>
+      <div className="card" style={{padding:18}}>
+        <div className="font-display" style={{fontSize:15,fontWeight:600,marginBottom:14}}>Habit List</div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {habits.map(h=>(<div key={h.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:13}}>{h.name}</span><span style={{cursor:"pointer",color:"var(--text-faint)"}} onClick={()=>setHabits(hs=>hs.filter(x=>x.id!==h.id))}>{ICONS.trash}</span></div>))}
+        </div>
+      </div>
+      <div className="card" style={{padding:18}}>
+        <div className="font-display" style={{fontSize:15,fontWeight:600,marginBottom:10}}>Data</div>
+        <div style={{fontSize:12,color:"var(--text-dim)",marginBottom:12}}>Everything is stored locally in this browser only — nothing is sent anywhere.</div>
+        <div className="btn" style={{color:"var(--danger)",borderColor:"var(--danger)"}} onClick={resetAllData}>Reset all data</div>
+      </div>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+</script>
+</body>
+</html>

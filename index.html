@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Habit-Tracker — Your Daily OS</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+  :root{
+    --bg:#0e1015; --surface:#171a22; --surface-2:#1e222c;
+    --border:#2a2f3b; --border-soft:#20242e; --text:#f0eee8; --text-dim:#9498a6; --text-faint:#61667a;
+    --accent:#c9a24d; --accent-soft:#c9a24d22; --accent-2:#5aa895; --danger:#e2604f; --violet:#8b7fd6;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;}
+  .display{font-family:'Fraunces',serif;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  .wrap{max-width:960px;margin:0 auto;padding:0 24px;}
+  header{padding:22px 0;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border-soft);}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:700;}
+  .logo{width:32px;height:32px;border-radius:9px;background:var(--accent);color:#1a1608;display:flex;align-items:center;justify-content:center;font-weight:800;}
+  .hero{padding:90px 0 60px;text-align:center;}
+  .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:18px;}
+  h1{font-size:clamp(34px,6vw,58px);line-height:1.08;margin:0 0 20px;font-weight:600;}
+  h1 em{color:var(--accent);font-style:italic;}
+  .sub{font-size:17px;color:var(--text-dim);max-width:560px;margin:0 auto 38px;line-height:1.6;}
+  .cta-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:14px 26px;border-radius:12px;font-weight:700;font-size:14.5px;text-decoration:none;cursor:pointer;border:1px solid var(--border);}
+  .btn-primary{background:var(--accent);color:#1a1608;border-color:var(--accent);}
+  .btn-primary:hover{filter:brightness(1.08);}
+  .btn-ghost{background:var(--surface-2);color:var(--text);}
+  .btn-ghost:hover{border-color:var(--accent);}
+  .hint{font-size:12px;color:var(--text-faint);margin-top:14px;}
+  .spine{position:relative;padding:60px 0;}
+  .spine-line{position:absolute;left:50%;top:0;bottom:0;width:2px;background:var(--border);transform:translateX(-0.5px);}
+  .features{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;padding:20px 0 70px;}
+  .card{background:var(--surface);border:1px solid var(--border-soft);border-radius:16px;padding:22px;}
+  .card .icon{width:34px;height:34px;border-radius:10px;background:var(--accent-soft);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:16px;margin-bottom:14px;}
+  .card h3{font-size:15px;margin:0 0 8px;}
+  .card p{font-size:13px;color:var(--text-dim);line-height:1.55;margin:0;}
+  .routine{background:var(--surface);border:1px solid var(--border-soft);border-radius:20px;padding:32px;margin-bottom:70px;}
+  .routine h2{font-size:22px;margin:0 0 4px;}
+  .routine .sub2{font-size:13px;color:var(--text-faint);margin-bottom:22px;}
+  .timeline{display:flex;flex-direction:column;gap:0;}
+  .tl-item{display:flex;gap:16px;padding:10px 0;border-bottom:1px solid var(--border-soft);align-items:baseline;}
+  .tl-item:last-child{border-bottom:none;}
+  .tl-time{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--text-faint);width:130px;flex-shrink:0;}
+  .tl-label{font-size:13.5px;}
+  .tag{font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:999px;margin-left:8px;background:var(--surface-2);color:var(--text-faint);}
+  footer{border-top:1px solid var(--border-soft);padding:30px 0;text-align:center;color:var(--text-faint);font-size:12px;}
+  .note{background:var(--accent-soft);border:1px solid var(--accent);border-radius:12px;padding:16px 18px;font-size:13px;line-height:1.6;margin-bottom:50px;}
+  .note b{color:var(--accent);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand"><div class="logo">H</div> Habit-Tracker</div>
+    <a href="app.html" class="btn btn-ghost" style="padding:9px 16px;font-size:13px;">Open App</a>
+  </header>
+
+  <section class="hero">
+    <div class="eyebrow">Your Daily Operating System</div>
+    <h1>One app to run classes,<br/><em>business</em>, fitness, and sleep.</h1>
+    <p class="sub">Built around your actual fixed schedule — 8&nbsp;AM classes, a real 2-hour study block, dinner at 8:30 — with a to-do list, habit tracker, health &amp; calorie log, focus timer, and business tracker underneath it.</p>
+    <div class="cta-row">
+      <a href="app.html" download="habit-tracker.html" class="btn btn-primary">⬇ Download the App</a>
+      <a href="app.html" class="btn btn-ghost">Open in Browser</a>
+    </div>
+    <div class="hint">Single file · runs offline · your data stays on your device · no account needed</div>
+  </section>
+
+  <div class="note">
+    <b>How it works:</b> "Habit-Tracker" is a single self-contained HTML file — there's no app store install. Click <b>Download</b> to save it, then double-click the file any time to open your dashboard in a browser tab. Everything you enter is saved locally on your device between visits.
+  </div>
+
+  <div class="features">
+    <div class="card"><div class="icon">☑</div><h3>Tasks &amp; To-Do</h3><p>Add real tasks with priority, category, and deadline. Nothing pre-filled — it's your list from day one.</p></div>
+    <div class="card"><div class="icon">◷</div><h3>Full Day Routine</h3><p>A complete, followable weekday and weekend timetable — wake time through sleep — built around your fixed blocks.</p></div>
+    <div class="card"><div class="icon">♥</div><h3>Health Tracker</h3><p>A starter diet plan, a daily food log with calories consumed, and a physical activity log with calories burnt.</p></div>
+    <div class="card"><div class="icon">🔥</div><h3>Habit Streaks</h3><p>Exercise, study, reading, water, and any custom habit — with streaks and a 30-day heatmap.</p></div>
+    <div class="card"><div class="icon">◎</div><h3>Focus Timer</h3><p>25/5 and 50/10 Pomodoro sessions that log your focused minutes for the day.</p></div>
+    <div class="card"><div class="icon">◫</div><h3>Business Tracker</h3><p>Leads, orders, content calendar, and ideas for your stationery business — one board each.</p></div>
+  </div>
+
+  <div class="routine">
+    <h2 class="display">Today's default routine</h2>
+    <div class="sub2">Weekday template — fully editable inside the app</div>
+    <div class="timeline">
+      <div class="tl-item"><div class="tl-time">6:00 – 6:15 AM</div><div class="tl-label">Wake up + hydrate</div></div>
+      <div class="tl-item"><div class="tl-time">6:15 – 7:00 AM</div><div class="tl-label">Exercise (45 min)<span class="tag">fitness</span></div></div>
+      <div class="tl-item"><div class="tl-time">7:30 – 8:00 AM</div><div class="tl-label">Breakfast</div></div>
+      <div class="tl-item"><div class="tl-time">8:00 AM – 2:00 PM</div><div class="tl-label">Classes<span class="tag">fixed</span></div></div>
+      <div class="tl-item"><div class="tl-time">2:00 – 2:30 PM</div><div class="tl-label">Lunch<span class="tag">fixed</span></div></div>
+      <div class="tl-item"><div class="tl-time">3:00 – 5:00 PM</div><div class="tl-label">Study / Academic block (2 hrs)</div></div>
+      <div class="tl-item"><div class="tl-time">5:00 – 6:00 PM</div><div class="tl-label">Stationery business work</div></div>
+      <div class="tl-item"><div class="tl-time">6:00 – 7:00 PM</div><div class="tl-label">Placement prep / certifications</div></div>
+      <div class="tl-item"><div class="tl-time">8:30 – 11:00 PM</div><div class="tl-label">Dinner + social time<span class="tag">fixed</span></div></div>
+      <div class="tl-item"><div class="tl-time">11:00 – 11:30 PM</div><div class="tl-label">Journal + plan tomorrow</div></div>
+    </div>
+  </div>
+
+  <footer>Habit-Tracker · a personal productivity dashboard · your data never leaves this device</footer>
+</div>
+</body>
+</html>
