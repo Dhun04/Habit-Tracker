@@ -61,6 +61,12 @@
 <body>
 <div id="root"></div>
 <script>
+  // Captured before React touches the page — guarantees the downloadable
+  // copy is always the clean original shell, never whatever happens to be
+  // rendered on screen at the moment someone clicks Download.
+  window.__PRISTINE_HTML__ = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+</script>
+<script>
 const { useState, useEffect, useMemo, useRef } = React;
 function useLocal(key, initial) {
   const [v, setV] = useState(() => {
@@ -187,7 +193,8 @@ const QUOTES = [
 const ICONS = { grid: "\u25A6", tasks: "\u2611", clock: "\u25F7", health: "\u2665", habit: "\u{1F525}", calendar: "\u25A4", focus: "\u25CE", goal: "\u25C8", business: "\u25EB", journal: "\u270E", settings: "\u2699", plus: "+", trash: "\u2715", check: "\u2713", logout: "\u23FB" };
 function downloadThisApp() {
   try {
-    const blob = new Blob(["<!DOCTYPE html>\n" + document.documentElement.outerHTML], { type: "text/html" });
+    const source = window.__PRISTINE_HTML__ || "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+    const blob = new Blob([source], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
