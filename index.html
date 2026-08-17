@@ -50,6 +50,23 @@
   footer{border-top:1px solid var(--border-soft);padding:30px 0;text-align:center;color:var(--text-faint);font-size:12px;}
   .note{background:var(--accent-soft);border:1px solid var(--accent);border-radius:12px;padding:16px 18px;font-size:13px;line-height:1.6;margin-bottom:50px;}
   .note b{color:var(--accent);}
+  * { min-width:0; }
+  html,body { overflow-x:hidden; width:100%; }
+  @media (max-width: 600px){
+    .wrap{padding:0 16px;}
+    header{padding:16px 0;}
+    header .btn{display:none;}
+    .hero{padding:44px 0 32px;}
+    h1{font-size:clamp(26px,8vw,34px);}
+    .sub{font-size:14.5px;}
+    .cta-row{flex-direction:column;}
+    .cta-row .btn{width:100%;justify-content:center;padding:15px 18px;}
+    .tl-item{flex-direction:column;gap:2px;align-items:flex-start;padding:9px 0;}
+    .tl-time{width:auto;}
+    .routine{padding:20px;}
+    .card{padding:18px;}
+    .note{padding:14px;font-size:12.5px;}
+  }
 </style>
 </head>
 <body>
@@ -60,18 +77,20 @@
   </header>
 
   <section class="hero">
-    <div class="eyebrow">Your Daily Operating System</div>
+    <div class="eyebrow">Step 1 — Choose how to open it</div>
     <h1>One app to run classes,<br/><em>business</em>, fitness, and sleep.</h1>
     <p class="sub">Built around your actual fixed schedule — 8&nbsp;AM classes, a real 2-hour study block, dinner at 8:30 — with a to-do list, habit tracker, health &amp; calorie log, focus timer, and business tracker underneath it.</p>
     <div class="cta-row">
-      <a href="app.html" download="habit-tracker.html" class="btn btn-primary">⬇ Download the App</a>
-      <a href="app.html" class="btn btn-ghost">Open in Browser</a>
+      <a href="app.html" class="btn btn-primary">Continue in Browser</a>
+      <a href="app.html" download="habit-tracker.html" class="btn btn-ghost">⬇ Download the App</a>
     </div>
-    <div class="hint">Single file · runs offline · your data stays on your device · no account needed</div>
+    <div class="hint">Either way, you'll sign in with Google next — your data stays private to your account, on this device</div>
   </section>
 
   <div class="note">
-    <b>How it works:</b> "Habit-Tracker" is a single self-contained HTML file — there's no app store install. Click <b>Download</b> to save it, then double-click the file any time to open your dashboard in a browser tab. Everything you enter is saved locally on your device between visits.
+    <b>Step 2 — Sign in.</b> Both options above open the same app — you'll land on a sign-in screen first. Use <b>Continue with Google</b> so only you can see or edit your tasks, habits, and day routine, or use a local account if you'd rather skip Google. "Download" just saves the file so you can reopen it later without the link; "Continue in Browser" opens it immediately, right here.
+    <br/><br/>
+    One caveat: Google Sign-In needs an internet connection and only works when opened from this live web link — the downloaded copy, opened offline by double-clicking, can still use a local account, just not Google.
   </div>
 
   <div class="features">
