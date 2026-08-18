@@ -4,7 +4,14 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
 <title>Habit-Tracker — Your Daily OS</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2222%22 fill=%22%23c9a24d%22/><text x=%2250%22 y=%2266%22 font-size=%2254%22 text-anchor=%22middle%22 fill=%22%231a1608%22 font-family=%22sans-serif%22>H</text></svg>">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0e1015">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Habit-Tracker">
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -65,6 +72,26 @@
   // copy is always the clean original shell, never whatever happens to be
   // rendered on screen at the moment someone clicks Download.
   window.__PRISTINE_HTML__ = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
+
+  // PWA: register the service worker (enables offline + installability).
+  // Silently no-ops if unsupported or opened via file:// — the HTML
+  // download option still works fine in either case.
+  if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("service-worker.js").catch(() => {});
+    });
+  }
+
+  // Capture Chrome/Edge/Android's native install prompt so we can trigger
+  // it from our own "Install App" button instead of waiting on the browser's
+  // own UI. iOS Safari doesn't fire this event — that path uses manual
+  // "Add to Home Screen" instructions instead, shown by the button itself.
+  window.__deferredInstallPrompt__ = null;
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    window.__deferredInstallPrompt__ = e;
+    window.dispatchEvent(new Event("pwa-install-available"));
+  });
 </script>
 <script>
 const { useState, useEffect, useMemo, useRef } = React;
@@ -191,6 +218,37 @@ const QUOTES = [
   "Energy, not time, is your scarcest resource. Spend it on purpose."
 ];
 const ICONS = { grid: "\u25A6", tasks: "\u2611", clock: "\u25F7", health: "\u2665", habit: "\u{1F525}", calendar: "\u25A4", focus: "\u25CE", goal: "\u25C8", business: "\u25EB", journal: "\u270E", settings: "\u2699", plus: "+", trash: "\u2715", check: "\u2713", logout: "\u23FB" };
+function isIOSDevice() {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+}
+function isRunningStandalone() {
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+}
+function useInstallAvailable() {
+  const [canInstall, setCanInstall] = useState(!!window.__deferredInstallPrompt__);
+  useEffect(() => {
+    const handler = () => setCanInstall(true);
+    window.addEventListener("pwa-install-available", handler);
+    return () => window.removeEventListener("pwa-install-available", handler);
+  }, []);
+  return canInstall;
+}
+function InstallAppButton() {
+  const canInstall = useInstallAvailable();
+  const [showHelp, setShowHelp] = useState(false);
+  if (isRunningStandalone()) return null;
+  async function handleClick() {
+    if (window.__deferredInstallPrompt__) {
+      window.__deferredInstallPrompt__.prompt();
+      await window.__deferredInstallPrompt__.userChoice;
+      window.__deferredInstallPrompt__ = null;
+      setShowHelp(false);
+    } else {
+      setShowHelp(true);
+    }
+  }
+  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "btn btn-accent", style: { width: "100%", justifyContent: "center", gap: 8 }, onClick: handleClick }, "\u{1F4F2} Install App"), showHelp && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "var(--text-faint)", marginTop: 8, lineHeight: 1.5 } }, isIOSDevice() ? 'On iPhone/iPad: tap the Share icon in Safari, then "Add to Home Screen."' : `Look for an install icon in your browser's address bar, or open the browser menu \u2192 "Install app" / "Add to Home Screen."`));
+}
 function downloadThisApp() {
   try {
     const source = window.__PRISTINE_HTML__ || "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
@@ -328,7 +386,7 @@ function LoginScreen({ usersRegistry, setUsersRegistry, onLogin }) {
   }, style: { flex: 1, textAlign: "center", padding: "7px 0", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600, background: mode === "login" ? "var(--accent)" : "transparent", color: mode === "login" ? "#1a1608" : "var(--text-dim)" } }, "Log In"), /* @__PURE__ */ React.createElement("div", { onClick: () => {
     setMode("signup");
     setError("");
-  }, style: { flex: 1, textAlign: "center", padding: "7px 0", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600, background: mode === "signup" ? "var(--accent)" : "transparent", color: mode === "signup" ? "#1a1608" : "var(--text-dim)" } }, "Sign Up")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "label", style: { marginBottom: 5 } }, "Username"), /* @__PURE__ */ React.createElement("input", { className: "input", value: username, onChange: (e) => setUsername(e.target.value), onKeyDown: (e) => e.key === "Enter" && submit(), placeholder: "e.g. dhun" })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "label", style: { marginBottom: 5 } }, "Password"), /* @__PURE__ */ React.createElement("input", { className: "input", type: "password", value: password, onChange: (e) => setPassword(e.target.value), onKeyDown: (e) => e.key === "Enter" && submit(), placeholder: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" })), error && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "var(--danger)" } }, error), /* @__PURE__ */ React.createElement("div", { className: "btn btn-accent", style: { justifyContent: "center", marginTop: 4 }, onClick: submit }, mode === "signup" ? "Create Account" : "Log In")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "var(--text-faint)", marginTop: 18, lineHeight: 1.5 } }, "Google sign-in verifies who you are across devices \u2014 but your tasks, habits, and logs are still saved only in this browser's local storage for now, so they won't yet appear on another device even after signing in with the same Google account there. Cloud data sync is a separate step."), /* @__PURE__ */ React.createElement("div", { className: "btn", style: { width: "100%", justifyContent: "center", marginTop: 14 }, onClick: downloadThisApp }, "\u2B07 Download the App"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10.5, color: "var(--text-faint)", marginTop: 8, textAlign: "center" } }, "Saves this app as a file you can reopen offline anytime. Google sign-in needs internet, but a local account still works offline.")));
+  }, style: { flex: 1, textAlign: "center", padding: "7px 0", borderRadius: 8, cursor: "pointer", fontSize: 13, fontWeight: 600, background: mode === "signup" ? "var(--accent)" : "transparent", color: mode === "signup" ? "#1a1608" : "var(--text-dim)" } }, "Sign Up")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 12 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "label", style: { marginBottom: 5 } }, "Username"), /* @__PURE__ */ React.createElement("input", { className: "input", value: username, onChange: (e) => setUsername(e.target.value), onKeyDown: (e) => e.key === "Enter" && submit(), placeholder: "e.g. dhun" })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { className: "label", style: { marginBottom: 5 } }, "Password"), /* @__PURE__ */ React.createElement("input", { className: "input", type: "password", value: password, onChange: (e) => setPassword(e.target.value), onKeyDown: (e) => e.key === "Enter" && submit(), placeholder: "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022" })), error && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "var(--danger)" } }, error), /* @__PURE__ */ React.createElement("div", { className: "btn btn-accent", style: { justifyContent: "center", marginTop: 4 }, onClick: submit }, mode === "signup" ? "Create Account" : "Log In")), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: "var(--text-faint)", marginTop: 18, lineHeight: 1.5 } }, "Google sign-in verifies who you are across devices \u2014 but your tasks, habits, and logs are still saved only in this browser's local storage for now, so they won't yet appear on another device even after signing in with the same Google account there. Cloud data sync is a separate step."), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 14 } }, /* @__PURE__ */ React.createElement(InstallAppButton, null)), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, margin: "14px 0", color: "var(--text-faint)", fontSize: 11 } }, /* @__PURE__ */ React.createElement("div", { style: { flex: 1, height: 1, background: "var(--border)" } }), " or ", /* @__PURE__ */ React.createElement("div", { style: { flex: 1, height: 1, background: "var(--border)" } })), /* @__PURE__ */ React.createElement("div", { className: "btn", style: { width: "100%", justifyContent: "center" }, onClick: downloadThisApp }, "\u2B07 Download as a file (.html)"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10.5, color: "var(--text-faint)", marginTop: 8, textAlign: "center" } }, "Install adds a proper app icon to your home screen/app drawer. Downloading saves a portable offline copy instead \u2014 either works with a local account; Google sign-in needs internet.")));
 }
 function AuthedApp({ user, displayName, isGoogle, onLogout }) {
   const k = (name) => `ht_${user}_${name}`;
@@ -691,7 +749,7 @@ function SettingsView({ habits, setHabits, storageKey, user, displayName, isGoog
   return /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 16 } }, /* @__PURE__ */ React.createElement("div", { className: "card", style: { padding: 18 } }, /* @__PURE__ */ React.createElement("div", { className: "font-display", style: { fontSize: 15, fontWeight: 600, marginBottom: 14 } }, "Account"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: "var(--text-dim)", marginBottom: 6 } }, "Logged in as ", /* @__PURE__ */ React.createElement("b", { style: { color: "var(--text)" } }, displayName || user)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11.5, color: isGoogle ? "var(--accent-2)" : "var(--text-faint)", marginBottom: 14 } }, isGoogle ? "\u2713 Signed in with Google \u2014 verified identity, but data is still device-local until cloud sync is added." : "Local account \u2014 this device only."), /* @__PURE__ */ React.createElement("div", { className: "btn", onClick: onLogout }, ICONS.logout, " Log out")), /* @__PURE__ */ React.createElement("div", { className: "card", style: { padding: 18 } }, /* @__PURE__ */ React.createElement("div", { className: "font-display", style: { fontSize: 15, fontWeight: 600, marginBottom: 6 } }, "Health Profile"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11.5, color: "var(--text-faint)", marginBottom: 12 } }, "Optional \u2014 improves the accuracy of exercise calorie estimates and enables a personalized daily energy target. Never required."), /* @__PURE__ */ React.createElement("div", { className: "two-col", style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 } }, /* @__PURE__ */ React.createElement("input", { className: "input", type: "number", placeholder: "Age", value: profile.age, onChange: (e) => setProfile((p) => ({ ...p, age: e.target.value })) }), /* @__PURE__ */ React.createElement("select", { className: "input", value: profile.sex, onChange: (e) => setProfile((p) => ({ ...p, sex: e.target.value })) }, /* @__PURE__ */ React.createElement("option", { value: "" }, "Sex"), /* @__PURE__ */ React.createElement("option", { value: "male" }, "Male"), /* @__PURE__ */ React.createElement("option", { value: "female" }, "Female")), /* @__PURE__ */ React.createElement("input", { className: "input", type: "number", placeholder: "Height (cm)", value: profile.height, onChange: (e) => setProfile((p) => ({ ...p, height: e.target.value })) }), /* @__PURE__ */ React.createElement("input", { className: "input", type: "number", placeholder: "Weight (kg)", value: profile.weight, onChange: (e) => setProfile((p) => ({ ...p, weight: e.target.value })) })), /* @__PURE__ */ React.createElement("select", { className: "input", value: profile.activity, onChange: (e) => setProfile((p) => ({ ...p, activity: e.target.value })) }, ["Sedentary", "Light", "Moderate", "Active", "Very Active"].map((a) => /* @__PURE__ */ React.createElement("option", { key: a }, a)))), /* @__PURE__ */ React.createElement("div", { className: "card", style: { padding: 18 } }, /* @__PURE__ */ React.createElement("div", { className: "font-display", style: { fontSize: 15, fontWeight: 600, marginBottom: 14 } }, "Notifications"), /* @__PURE__ */ React.createElement("div", { className: "btn", onClick: () => {
     if (typeof Notification === "undefined") return;
     Notification.requestPermission().then(setNotifPermission);
-  } }, "Enable browser notifications (", notifPermission, ")")), /* @__PURE__ */ React.createElement("div", { className: "card", style: { padding: 18 } }, /* @__PURE__ */ React.createElement("div", { className: "font-display", style: { fontSize: 15, fontWeight: 600, marginBottom: 14 } }, "Habit List"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, habits.map((h) => /* @__PURE__ */ React.createElement("div", { key: h.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13 } }, h.name), /* @__PURE__ */ React.createElement("span", { style: { cursor: "pointer", color: "var(--text-faint)" }, onClick: () => setHabits((hs) => hs.filter((x) => x.id !== h.id)) }, ICONS.trash))))), /* @__PURE__ */ React.createElement("div", { className: "card", style: { padding: 18 } }, /* @__PURE__ */ React.createElement("div", { className: "font-display", style: { fontSize: 15, fontWeight: 600, marginBottom: 10 } }, "Data"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "var(--text-dim)", marginBottom: 12 } }, "Stored locally in this browser, under your account only \u2014 nothing is sent anywhere, and other people's accounts on this device can't see it."), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, /* @__PURE__ */ React.createElement("div", { className: "btn", onClick: downloadThisApp }, "\u2B07 Download the App"), /* @__PURE__ */ React.createElement("div", { className: "btn", style: { color: "var(--danger)", borderColor: "var(--danger)" }, onClick: resetMyData }, "Reset my data"))));
+  } }, "Enable browser notifications (", notifPermission, ")")), /* @__PURE__ */ React.createElement("div", { className: "card", style: { padding: 18 } }, /* @__PURE__ */ React.createElement("div", { className: "font-display", style: { fontSize: 15, fontWeight: 600, marginBottom: 14 } }, "Habit List"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, habits.map((h) => /* @__PURE__ */ React.createElement("div", { key: h.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center" } }, /* @__PURE__ */ React.createElement("span", { style: { fontSize: 13 } }, h.name), /* @__PURE__ */ React.createElement("span", { style: { cursor: "pointer", color: "var(--text-faint)" }, onClick: () => setHabits((hs) => hs.filter((x) => x.id !== h.id)) }, ICONS.trash))))), /* @__PURE__ */ React.createElement("div", { className: "card", style: { padding: 18 } }, /* @__PURE__ */ React.createElement("div", { className: "font-display", style: { fontSize: 15, fontWeight: 600, marginBottom: 10 } }, "App"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "var(--text-dim)", marginBottom: 12 } }, "Stored locally in this browser, under your account only \u2014 nothing is sent anywhere, and other people's accounts on this device can't see it."), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 8 } }, /* @__PURE__ */ React.createElement(InstallAppButton, null), /* @__PURE__ */ React.createElement("div", { className: "btn", onClick: downloadThisApp }, "\u2B07 Download as a file (.html)"), /* @__PURE__ */ React.createElement("div", { className: "btn", style: { color: "var(--danger)", borderColor: "var(--danger)" }, onClick: resetMyData }, "Reset my data"))));
 }
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(/* @__PURE__ */ React.createElement(App, null));
